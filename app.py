@@ -365,6 +365,16 @@ header[data-testid="stHeader"] {background: transparent !important; backdrop-fil
     padding: 8px 0 2px 0;
 }
 </style>
+<script>
+function updateLocalTime(){
+    var el=document.getElementById('local-time');
+    if(el){
+        var d=new Date();
+        el.textContent=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    }
+}
+var _tI=setInterval(function(){if(document.getElementById('local-time')){updateLocalTime();clearInterval(_tI);}},200);
+</script>
 """, unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
@@ -589,7 +599,7 @@ st.markdown(
     '</div>'
     '<div style="font-size:14px;color:#8C939D;margin-top:2px;">Партнёрский отдел &middot; '
     f'Снимок данных: {filter_date_end.strftime("%d.%m.%Y")} &middot; '
-    f'Обновлено: {(_datetime.now() + __import__("datetime").timedelta(hours=6)).strftime("%H:%M")} (GMT+6)</div>'
+    'Обновлено: <span id="local-time">--:--</span></div>'
     '</div>'
     # Revenue & MRR targets
     '<div style="display:flex;gap:12px;margin-left:auto;flex-shrink:0;">'
