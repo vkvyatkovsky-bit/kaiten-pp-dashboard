@@ -589,7 +589,7 @@ st.markdown(
     '</div>'
     '<div style="font-size:14px;color:#8C939D;margin-top:2px;">Партнёрский отдел &middot; '
     f'Снимок данных: {filter_date_end.strftime("%d.%m.%Y")} &middot; '
-    f'Обновлено: {_datetime.now().strftime("%H:%M")}</div>'
+    f'Обновлено: {(_datetime.now() + __import__("datetime").timedelta(hours=6)).strftime("%H:%M")} (GMT+6)</div>'
     '</div>'
     # Revenue & MRR targets
     '<div style="display:flex;gap:12px;margin-left:auto;flex-shrink:0;">'
