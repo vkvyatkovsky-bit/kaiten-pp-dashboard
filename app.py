@@ -365,17 +365,24 @@ header[data-testid="stHeader"] {background: transparent !important; backdrop-fil
     padding: 8px 0 2px 0;
 }
 </style>
-<script>
-function updateLocalTime(){
-    var el=document.getElementById('local-time');
-    if(el){
-        var d=new Date();
-        el.textContent=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-    }
-}
-var _tI=setInterval(function(){if(document.getElementById('local-time')){updateLocalTime();clearInterval(_tI);}},200);
-</script>
 """, unsafe_allow_html=True)
+
+# Inject JS for local time via st.components
+import streamlit.components.v1 as _components
+_components.html("""
+<script>
+    function _setTime(){
+        var els = window.parent.document.querySelectorAll('#local-time');
+        els.forEach(function(el){
+            var d = new Date();
+            el.textContent = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        });
+    }
+    var _ti = setInterval(function(){
+        if(window.parent.document.getElementById('local-time')){_setTime();clearInterval(_ti);}
+    }, 300);
+</script>
+""", height=0, width=0)
 
 # ──────────────────────────────────────────────
 # Load data
@@ -602,7 +609,7 @@ st.markdown(
     'Обновлено: <span id="local-time">--:--</span></div>'
     '</div>'
     # Revenue & MRR targets
-    '<div style="display:flex;gap:12px;margin-left:auto;flex-shrink:0;">'
+    '<div style="display:flex;gap:12px;margin-left:auto;flex-shrink:0;margin-right:120px;">'
     '<div style="background:#F7F8FA;border:1px solid #E2E6EC;border-radius:8px;padding:8px 14px;text-align:center;">'
     '<div style="font-size:10px;font-weight:600;color:#8C939D;text-transform:uppercase;letter-spacing:0.5px;">Q1 план</div>'
     '<div style="font-size:13px;font-weight:700;color:#1A1A2E;margin-top:2px;">Revenue 2.4М</div>'
