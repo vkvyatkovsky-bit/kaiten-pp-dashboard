@@ -124,9 +124,17 @@ TARGETS_Q2 = {
     "leads_csm": {"label": "Лиды CSM", "target": 20, "source": "KPI Partner Lead"},
     "leads_bdm": {"label": "Лиды BDM", "target": 18, "source": "KPI Partner Lead"},
     "pipeline_kp": {"label": "Сумма КП", "target": 30_000_000, "source": "KPI Partner Lead", "fmt": "money"},
-    "revenue": {"label": "Revenue", "target": 18_000_000, "source": "KPI Partner Lead", "fmt": "money"},
-    "mrr": {"label": "MRR", "target": 1_500_000, "source": "KPI Partner Lead", "fmt": "money"},
+    "revenue": {"label": "Revenue", "target": 10_000_000, "source": "KPI Partner Lead", "fmt": "money"},
+    "mrr": {"label": "MRR", "target": 800_000, "source": "KPI Partner Lead", "fmt": "money"},
 }
+
+# --- Quarterly plans for header (Revenue + MRR) ---
+QUARTERLY_PLANS = [
+    {"q": "Q1", "revenue": 2_400_000, "mrr": 200_000},
+    {"q": "Q2", "revenue": 10_000_000, "mrr": 800_000},
+    {"q": "Q3", "revenue": 15_000_000, "mrr": 1_500_000, "forecast": True},
+    {"q": "Q4", "revenue": 18_000_000, "mrr": 2_000_000, "forecast": True},
+]
 
 # --- BDM personal KPI (monthly, per manager) ---
 BDM_KPI_TARGETS = {

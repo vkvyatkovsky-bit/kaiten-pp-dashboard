@@ -11,6 +11,7 @@ from config import (
     MANAGER_COLORS,
     TARGETS_Q1,
     TARGETS_Q2,
+    QUARTERLY_PLANS,
     BDM_KPI_TARGETS,
     BDM_TOTAL_BONUS,
     BDM_MANAGERS,
@@ -611,26 +612,27 @@ st.markdown(
     f'Снимок данных: {filter_date_end.strftime("%d.%m.%Y")} &middot; '
     'Обновлено: <span id="local-time">--:--</span></div>'
     '</div>'
-    # Revenue & MRR quarterly targets
+    # Revenue & MRR quarterly targets (from config)
     '<div style="display:flex;gap:8px;margin-left:auto;flex-shrink:0;margin-right:120px;">'
     + ''.join([
-        f'<div style="background:{bg};border:1px solid {brd};border-radius:8px;padding:6px 12px;text-align:center;'
-        f'{"box-shadow:0 0 0 2px #4A90D9;" if cur else ""}">'
-        f'<div style="font-size:9px;font-weight:600;color:{lbl_clr};text-transform:uppercase;letter-spacing:0.5px;">{q}</div>'
-        f'<div style="font-size:12px;font-weight:700;color:#1A1A2E;margin-top:1px;">Rev {rev}</div>'
-        f'<div style="font-size:11px;color:#6B7280;">MRR {mrr}</div>'
-        f'{prg}'
-        f'</div>'
-        for q, rev, mrr, cur, bg, brd, lbl_clr, prg in [
-            ("Q1", "2.4М", "200К", _current_q == 1, "#F0F7FF" if _current_q == 1 else "#F7F8FA", "#4A90D9" if _current_q == 1 else "#E2E6EC", "#4A90D9" if _current_q == 1 else "#8C939D",
-             '<div style="font-size:9px;color:#4A90D9;margin-top:2px;font-weight:600;">← текущий</div>' if _current_q == 1 else ""),
-            ("Q2", "18М", "1.5М", _current_q == 2, "#F0F7FF" if _current_q == 2 else "#F7F8FA", "#4A90D9" if _current_q == 2 else "#E2E6EC", "#4A90D9" if _current_q == 2 else "#8C939D",
-             '<div style="font-size:9px;color:#4A90D9;margin-top:2px;font-weight:600;">← текущий</div>' if _current_q == 2 else ""),
-            ("Q3 прогноз", "12.8М", "14.3М", _current_q == 3, "#F0F7FF" if _current_q == 3 else "#FAFAFA", "#4A90D9" if _current_q == 3 else "#E8E8E8", "#4A90D9" if _current_q == 3 else "#B0B0B0",
-             '<div style="font-size:9px;color:#4A90D9;margin-top:2px;font-weight:600;">← текущий</div>' if _current_q == 3 else ""),
-            ("Q4 прогноз", "19.3М", "21.5М", _current_q == 4, "#F0F7FF" if _current_q == 4 else "#FAFAFA", "#4A90D9" if _current_q == 4 else "#E8E8E8", "#4A90D9" if _current_q == 4 else "#B0B0B0",
-             '<div style="font-size:9px;color:#4A90D9;margin-top:2px;font-weight:600;">← текущий</div>' if _current_q == 4 else ""),
-        ]
+        (lambda p, qi: (
+            '<div style="background:{bg};border:1px solid {brd};border-radius:8px;padding:6px 12px;text-align:center;'
+            '{shadow}">'
+            '<div style="font-size:9px;font-weight:600;color:{lbl};text-transform:uppercase;letter-spacing:0.5px;">{q}</div>'
+            '<div style="font-size:12px;font-weight:700;color:#1A1A2E;margin-top:1px;">Rev {rev}</div>'
+            '<div style="font-size:11px;color:#6B7280;">MRR {mrr}</div>'
+            '{tag}</div>'
+        ).format(
+            bg="#F0F7FF" if qi == _current_q else ("#FAFAFA" if p.get("forecast") else "#F7F8FA"),
+            brd="#4A90D9" if qi == _current_q else ("#E8E8E8" if p.get("forecast") else "#E2E6EC"),
+            shadow="box-shadow:0 0 0 2px #4A90D9;" if qi == _current_q else "",
+            lbl="#4A90D9" if qi == _current_q else ("#B0B0B0" if p.get("forecast") else "#8C939D"),
+            q=p["q"] + (" прогноз" if p.get("forecast") else ""),
+            rev=_short_money(p["revenue"], "М"),
+            mrr=_short_money(p["mrr"], "М") if p["mrr"] >= 1_000_000 else _short_money(p["mrr"], "К").replace("т", "К"),
+            tag='<div style="font-size:9px;color:#4A90D9;margin-top:2px;font-weight:600;">← текущий</div>' if qi == _current_q else "",
+        ))(p, i + 1)
+        for i, p in enumerate(QUARTERLY_PLANS)
     ])
     + '</div>'
     '</div>',
