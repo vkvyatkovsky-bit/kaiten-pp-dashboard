@@ -17,6 +17,9 @@ from config import (
 )
 import html as _html
 from datetime import datetime as _datetime
+
+# Current quarter (used in header and progress section)
+_current_q = (_datetime.now().month - 1) // 3 + 1
 from data_loader import (
     load_pipeline,
     load_longlist,
@@ -608,19 +611,28 @@ st.markdown(
     f'Снимок данных: {filter_date_end.strftime("%d.%m.%Y")} &middot; '
     'Обновлено: <span id="local-time">--:--</span></div>'
     '</div>'
-    # Revenue & MRR targets
-    '<div style="display:flex;gap:12px;margin-left:auto;flex-shrink:0;margin-right:120px;">'
-    '<div style="background:#F7F8FA;border:1px solid #E2E6EC;border-radius:8px;padding:8px 14px;text-align:center;">'
-    '<div style="font-size:10px;font-weight:600;color:#8C939D;text-transform:uppercase;letter-spacing:0.5px;">Q1 план</div>'
-    '<div style="font-size:13px;font-weight:700;color:#1A1A2E;margin-top:2px;">Revenue 2.4М</div>'
-    '<div style="font-size:12px;color:#6B7280;">MRR 200К</div>'
-    '</div>'
-    '<div style="background:#F7F8FA;border:1px solid #E2E6EC;border-radius:8px;padding:8px 14px;text-align:center;">'
-    '<div style="font-size:10px;font-weight:600;color:#8C939D;text-transform:uppercase;letter-spacing:0.5px;">Q2 план</div>'
-    '<div style="font-size:13px;font-weight:700;color:#1A1A2E;margin-top:2px;">Revenue 18М</div>'
-    '<div style="font-size:12px;color:#6B7280;">MRR 1.5М</div>'
-    '</div>'
-    '</div>'
+    # Revenue & MRR quarterly targets
+    '<div style="display:flex;gap:8px;margin-left:auto;flex-shrink:0;margin-right:120px;">'
+    + ''.join([
+        f'<div style="background:{bg};border:1px solid {brd};border-radius:8px;padding:6px 12px;text-align:center;'
+        f'{"box-shadow:0 0 0 2px #4A90D9;" if cur else ""}">'
+        f'<div style="font-size:9px;font-weight:600;color:{lbl_clr};text-transform:uppercase;letter-spacing:0.5px;">{q}</div>'
+        f'<div style="font-size:12px;font-weight:700;color:#1A1A2E;margin-top:1px;">Rev {rev}</div>'
+        f'<div style="font-size:11px;color:#6B7280;">MRR {mrr}</div>'
+        f'{prg}'
+        f'</div>'
+        for q, rev, mrr, cur, bg, brd, lbl_clr, prg in [
+            ("Q1", "2.4М", "200К", _current_q == 1, "#F0F7FF" if _current_q == 1 else "#F7F8FA", "#4A90D9" if _current_q == 1 else "#E2E6EC", "#4A90D9" if _current_q == 1 else "#8C939D",
+             '<div style="font-size:9px;color:#4A90D9;margin-top:2px;font-weight:600;">← текущий</div>' if _current_q == 1 else ""),
+            ("Q2", "18М", "1.5М", _current_q == 2, "#F0F7FF" if _current_q == 2 else "#F7F8FA", "#4A90D9" if _current_q == 2 else "#E2E6EC", "#4A90D9" if _current_q == 2 else "#8C939D",
+             '<div style="font-size:9px;color:#4A90D9;margin-top:2px;font-weight:600;">← текущий</div>' if _current_q == 2 else ""),
+            ("Q3 прогноз", "12.8М", "14.3М", _current_q == 3, "#F0F7FF" if _current_q == 3 else "#FAFAFA", "#4A90D9" if _current_q == 3 else "#E8E8E8", "#4A90D9" if _current_q == 3 else "#B0B0B0",
+             '<div style="font-size:9px;color:#4A90D9;margin-top:2px;font-weight:600;">← текущий</div>' if _current_q == 3 else ""),
+            ("Q4 прогноз", "19.3М", "21.5М", _current_q == 4, "#F0F7FF" if _current_q == 4 else "#FAFAFA", "#4A90D9" if _current_q == 4 else "#E8E8E8", "#4A90D9" if _current_q == 4 else "#B0B0B0",
+             '<div style="font-size:9px;color:#4A90D9;margin-top:2px;font-weight:600;">← текущий</div>' if _current_q == 4 else ""),
+        ]
+    ])
+    + '</div>'
     '</div>',
     unsafe_allow_html=True,
 )
