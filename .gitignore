@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+credentials.json
+*.json
+!secrets_example.toml
+.env
+*.xlsx
+*.xls
+data/
+.vscode/
+.idea/
+*.swp
+*.swo
