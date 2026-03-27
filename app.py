@@ -368,6 +368,35 @@ header[data-testid="stHeader"] {background: transparent !important; backdrop-fil
     font-size: 13px;
     padding: 8px 0 2px 0;
 }
+/* ── Train loading animation ── */
+@keyframes trainSlideIn {
+    0%   { transform: translateX(120%); }
+    70%  { transform: translateX(0%); }
+    85%  { transform: translateX(-3%); }
+    92%  { transform: translateX(1%); }
+    100% { transform: translateX(0%); }
+}
+@keyframes wheelSpin {
+    0%   { transform: rotate(0deg); }
+    70%  { transform: rotate(-720deg); }
+    100% { transform: rotate(-720deg); }
+}
+@keyframes smokeRise {
+    0%   { opacity: 0.6; transform: translate(0,0) scale(1); }
+    50%  { opacity: 0.3; transform: translate(8px,-12px) scale(1.5); }
+    100% { opacity: 0; transform: translate(16px,-24px) scale(2); }
+}
+@keyframes smokeFade {
+    0%   { opacity: 1; }
+    70%  { opacity: 1; }
+    100% { opacity: 0; }
+}
+.train-animated { animation: trainSlideIn 3.5s cubic-bezier(.25,.46,.45,.94) forwards; }
+.train-animated .train-wheel { animation: wheelSpin 3.5s cubic-bezier(.25,.46,.45,.94) forwards; }
+.train-smoke-group { animation: smokeFade 4.5s ease-out forwards; }
+.train-smoke-group circle { animation: smokeRise 1.8s ease-out infinite; }
+.train-smoke-group circle:nth-child(2) { animation-delay: 0.6s; }
+.train-smoke-group circle:nth-child(3) { animation-delay: 1.2s; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -389,6 +418,138 @@ _components.html("""
 """, height=0, width=0)
 
 # ──────────────────────────────────────────────
+# Pre-load helpers (needed for header before data loads)
+# ──────────────────────────────────────────────
+def _short_money(val, suffix="м"):
+    """Format money as short string: 1500000 -> '1.5м', 500000 -> '500т'."""
+    if abs(val) >= 1_000_000:
+        r = val / 1_000_000
+        return f'{r:.1f}{suffix}'.replace('.0' + suffix, suffix)
+    return f'{val / 1_000:.0f}т'
+
+
+
+def _build_train_html(animated=False):
+    """Build the locomotive + wagons HTML. animated=True adds slide-in + smoke."""
+    anim_cls = ' class="train-animated"' if animated else ''
+    wheel_cls = ' class="train-wheel"' if animated else ''
+    # Smoke: animated group or static circles
+    if animated:
+        smoke_html = (
+            '<g class="train-smoke-group">'
+            '<circle cx="21" cy="4" r="4" stroke="#9E9E9E" stroke-width="1" fill="#D0D0D0" fill-opacity="0.3" opacity="0.5"/>'
+            '<circle cx="14" cy="-2" r="3" stroke="#9E9E9E" stroke-width="0.8" fill="#D0D0D0" fill-opacity="0.2" opacity="0.35"/>'
+            '<circle cx="8" cy="-6" r="2.5" stroke="#9E9E9E" stroke-width="0.6" fill="#D0D0D0" fill-opacity="0.15" opacity="0.2"/>'
+            '</g>'
+        )
+    else:
+        smoke_html = (
+            '<circle cx="21" cy="4" r="4" stroke="#9E9E9E" stroke-width="1" fill="none" opacity="0.4"/>'
+            '<circle cx="13" cy="2" r="2.5" stroke="#9E9E9E" stroke-width="0.8" fill="none" opacity="0.25"/>'
+        )
+
+    wagons = ''.join([
+        (lambda p, qi: (
+            '<div style="width:3px;height:2px;background:#8C939D;flex-shrink:0;z-index:2;align-self:flex-end;margin-bottom:8px;"></div>'
+            '<div style="position:relative;flex-shrink:0;width:124px;z-index:2;">'
+            '<div style="border-radius:10px;padding:8px 12px;text-align:center;height:60px;display:flex;flex-direction:column;'
+            'justify-content:center;box-sizing:border-box;background:{bg};border:{brd_style};{shadow}">'
+            '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:{lbl};">{q}</div>'
+            '<div style="font-size:14px;font-weight:700;color:#1A1A2E;margin-top:2px;">Rev {rev}</div>'
+            '<div style="font-size:12px;color:#6B7280;">MRR {mrr}</div>'
+            '</div>'
+            '<div{wc} style="position:absolute;bottom:-4px;left:18px;width:14px;height:14px;border-radius:50%;border:1.5px solid #1A1A2E;'
+            'background:radial-gradient(circle,#4A90D9 22%,transparent 22%);z-index:3;"></div>'
+            '<div{wc} style="position:absolute;bottom:-4px;right:18px;width:14px;height:14px;border-radius:50%;border:1.5px solid #1A1A2E;'
+            'background:radial-gradient(circle,#4A90D9 22%,transparent 22%);z-index:3;"></div>'
+            '<div style="position:absolute;bottom:8px;right:-5px;width:7px;height:2px;background:#8C939D;z-index:2;"></div>'
+            '</div>'
+        ).format(
+            bg="#EFF6FF" if qi == _current_q else ("#FAFAFA" if p.get("forecast") else "#F7F8FA"),
+            brd_style="2px solid #4A90D9" if qi == _current_q else ("1.5px dashed #E0E0E0" if p.get("forecast") else "1.5px solid #E2E6EC"),
+            shadow="box-shadow:0 0 0 2px rgba(74,144,217,0.15);" if qi == _current_q else ("opacity:0.85;" if p.get("forecast") else ""),
+            lbl="#4A90D9" if qi == _current_q else ("#B0B0B0" if p.get("forecast") else "#8C939D"),
+            q=p["q"] + (" прогноз" if p.get("forecast") else " план"),
+            rev=_short_money(p["revenue"], "М"),
+            mrr=_short_money(p["mrr"], "М") if p["mrr"] >= 1_000_000 else _short_money(p["mrr"], "К").replace("т", "К"),
+            wc=wheel_cls,
+        ))(p, i + 1)
+        for i, p in enumerate(QUARTERLY_PLANS)
+    ])
+
+    return (
+        f'<div{anim_cls} style="margin-left:auto;flex-shrink:0;margin-right:120px;position:relative;display:flex;align-items:flex-end;gap:0;padding-bottom:22px;overflow:hidden;">'
+        '<div style="position:absolute;bottom:16px;left:0;right:0;height:2px;background:#8C939D;z-index:1;border-radius:1px;"></div>'
+        '<div style="position:absolute;bottom:12px;left:0;right:0;height:1.5px;background:#8C939D;opacity:0.4;z-index:1;border-radius:1px;"></div>'
+        '<div style="position:absolute;bottom:10px;left:0;right:0;height:10px;z-index:0;'
+        'background:repeating-linear-gradient(90deg,transparent,transparent 16px,rgba(176,176,176,0.25) 16px,rgba(176,176,176,0.25) 19px);"></div>'
+        '<div style="position:relative;flex-shrink:0;width:90px;z-index:2;">'
+        '<svg width="90" height="60" viewBox="0 0 90 60" fill="none" stroke="#4A90D9" style="display:block;">'
+        + smoke_html +
+        '<rect x="16" y="7" width="10" height="13" rx="2" stroke-width="1.8"/>'
+        '<rect x="14" y="5" width="14" height="3.5" rx="1" stroke-width="1.5"/>'
+        '<ellipse cx="38" cy="20" rx="5" ry="3" stroke-width="1.2" fill="none"/>'
+        '<rect x="8" y="20" width="48" height="22" rx="5" stroke-width="2" fill="none"/>'
+        '<line x1="24" y1="20" x2="24" y2="42" stroke-width="0.8" opacity="0.3"/>'
+        '<line x1="40" y1="20" x2="40" y2="42" stroke-width="0.8" opacity="0.3"/>'
+        '<circle cx="8" cy="31" r="7" stroke-width="2" fill="none"/>'
+        '<circle cx="8" cy="31" r="2.5" stroke-width="1" fill="none"/>'
+        '<rect x="54" y="12" width="22" height="30" rx="3" stroke-width="2" fill="none"/>'
+        '<path d="M52 12 L78 12 L78 8 Q65 3 52 8 Z" stroke-width="1.5" fill="none"/>'
+        '<rect x="58" y="17" width="6" height="8" rx="1" stroke-width="1.2" fill="none"/>'
+        '<rect x="66" y="17" width="6" height="8" rx="1" stroke-width="1.2" fill="none"/>'
+        '<path d="M0 50 L8 42 L8 50 Z" stroke-width="1.2" fill="none"/>'
+        '<line x1="0" y1="46" x2="78" y2="46" stroke="#1A1A2E" stroke-width="2"/>'
+        '</svg>'
+        f'<div{wheel_cls} style="position:absolute;bottom:-4px;left:12px;width:18px;height:18px;border-radius:50%;border:2px solid #1A1A2E;'
+        'background:radial-gradient(circle,#4A90D9 25%,transparent 25%);z-index:3;"></div>'
+        f'<div{wheel_cls} style="position:absolute;bottom:-4px;left:36px;width:18px;height:18px;border-radius:50%;border:2px solid #1A1A2E;'
+        'background:radial-gradient(circle,#4A90D9 25%,transparent 25%);z-index:3;"></div>'
+        f'<div{wheel_cls} style="position:absolute;bottom:-2px;left:64px;width:14px;height:14px;border-radius:50%;border:1.5px solid #1A1A2E;'
+        'background:radial-gradient(circle,#4A90D9 22%,transparent 22%);z-index:3;"></div>'
+        '<div style="position:absolute;bottom:8px;right:-5px;width:7px;height:2px;background:#8C939D;z-index:2;"></div>'
+        '</div>'
+        + wagons
+        + '</div>'
+    )
+
+
+def _build_full_header(period_label, snapshot_date, animated=False):
+    """Build complete header: title + subtitle + train."""
+    return (
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:0;">'
+        '<div style="width:4px;height:42px;background:linear-gradient(180deg,#4A90D9,#66BB6A);border-radius:2px;"></div>'
+        '<div style="flex:1;">'
+        '<div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;">'
+        '<div style="font-size:28px;font-weight:800;color:#1A1A2E;line-height:1.2;letter-spacing:-0.3px;">'
+        'KPI Партнёрского канала Kaiten</div>'
+        f'<div style="font-size:13px;font-weight:600;color:#4A90D9;background:#EBF0FA;'
+        f'padding:3px 12px;border-radius:6px;white-space:nowrap;">{period_label}</div>'
+        '</div>'
+        f'<div style="font-size:14px;color:#8C939D;margin-top:2px;">Партнёрский отдел &middot; '
+        f'Снимок данных: {snapshot_date} &middot; '
+        'Обновлено: <span id="local-time">--:--</span></div>'
+        '</div>'
+        + _build_train_html(animated=animated)
+        + '</div>'
+    )
+
+
+# ──────────────────────────────────────────────
+# Animated header placeholder (renders BEFORE data load)
+# ──────────────────────────────────────────────
+_header_placeholder = st.empty()
+_is_first_load = "data_loaded" not in st.session_state
+_header_placeholder.markdown(
+    _build_full_header(
+        period_label="Загрузка данных…",
+        snapshot_date="—",
+        animated=_is_first_load,
+    ),
+    unsafe_allow_html=True,
+)
+
+# ──────────────────────────────────────────────
 # Load data
 # ──────────────────────────────────────────────
 df_pipe = load_pipeline()
@@ -396,6 +557,7 @@ df_long = load_longlist()
 longlists_by_mgr = load_all_longlists()  # {manager: count}
 df_deals = load_deals()
 df_timeline = build_touches_timeline(df_pipe)
+st.session_state.data_loaded = True
 
 # ──────────────────────────────────────────────
 # Compute data period from touch dates
@@ -415,6 +577,8 @@ if _touch_dates:
     _sorted_dates = sorted(set(d.date() if hasattr(d, 'date') else d for d in _touch_dates))
     if len(_sorted_dates) >= 2 and (_data_max - _sorted_dates[-2]).days > 30:
         _data_max = _sorted_dates[-2]
+    # Cap at today — don't show future dates as snapshot
+    _data_max = min(_data_max, date.today())
 else:
     _data_min = date.today().replace(day=1)
     _data_max = date.today()
@@ -543,14 +707,6 @@ def fmt_money(val):
     return f'{val:.0f}<span class="unit"> ₽</span>'
 
 
-def _short_money(val, suffix="м"):
-    """Format money as short string: 1500000 -> '1.5м', 2000000 -> '2м', 500000 -> '500т'."""
-    if abs(val) >= 1_000_000:
-        r = val / 1_000_000
-        return f'{r:.1f}{suffix}'.replace('.0' + suffix, suffix)
-    return f'{val / 1_000:.0f}т'
-
-
 def info_tip(desc, formula="", source="", tip_cls=""):
     """Return HTML for (i) tooltip icon."""
     body = desc
@@ -596,108 +752,14 @@ PLOTLY_LAYOUT = dict(
 )
 
 # ──────────────────────────────────────────────
-# HEADER
+# HEADER — replace placeholder with real data (static train)
 # ──────────────────────────────────────────────
-st.markdown(
-    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:0;">'
-    '<div style="width:4px;height:42px;background:linear-gradient(180deg,#4A90D9,#66BB6A);border-radius:2px;"></div>'
-    '<div style="flex:1;">'
-    '<div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;">'
-    '<div style="font-size:28px;font-weight:800;color:#1A1A2E;line-height:1.2;letter-spacing:-0.3px;">'
-    'KPI Партнёрского канала Kaiten</div>'
-    f'<div style="font-size:13px;font-weight:600;color:#4A90D9;background:#EBF0FA;'
-    f'padding:3px 12px;border-radius:6px;white-space:nowrap;">{period_label}</div>'
-    '</div>'
-    '<div style="font-size:14px;color:#8C939D;margin-top:2px;">Партнёрский отдел &middot; '
-    f'Снимок данных: {filter_date_end.strftime("%d.%m.%Y")} &middot; '
-    'Обновлено: <span id="local-time">--:--</span></div>'
-    '</div>'
-    # Revenue & MRR quarterly targets (from config)
-    # === TRAIN + WAGONS: Pure HTML/CSS ===
-    # Key alignment: container padding-bottom=22px. Track at bottom:22px.
-    # All wheels bottom:-22px from their parent's bottom edge → touch track.
-    # Wagon height=76px (54 body + 22 wheel zone). Loco height=82px.
-    + (lambda: '<div style="margin-left:auto;flex-shrink:0;margin-right:120px;position:relative;display:flex;align-items:flex-end;gap:0;padding-bottom:22px;">'
-        # Track: two rails at bottom:22px and bottom:18px
-        '<div style="position:absolute;bottom:16px;left:0;right:0;height:2px;background:#8C939D;z-index:1;border-radius:1px;"></div>'
-        '<div style="position:absolute;bottom:12px;left:0;right:0;height:1.5px;background:#8C939D;opacity:0.4;z-index:1;border-radius:1px;"></div>'
-        # Sleepers
-        '<div style="position:absolute;bottom:10px;left:0;right:0;height:10px;z-index:0;'
-        'background:repeating-linear-gradient(90deg,transparent,transparent 16px,rgba(176,176,176,0.25) 16px,rgba(176,176,176,0.25) 19px);"></div>'
-        # === LOCOMOTIVE ===
-        '<div style="position:relative;flex-shrink:0;width:90px;z-index:2;">'
-        # SVG body (above wheels)
-        '<svg width="90" height="60" viewBox="0 0 90 60" fill="none" stroke="#4A90D9" style="display:block;">'
-        # Smoke
-        '<circle cx="21" cy="4" r="4" stroke="#9E9E9E" stroke-width="1" fill="none" opacity="0.4"/>'
-        '<circle cx="13" cy="2" r="2.5" stroke="#9E9E9E" stroke-width="0.8" fill="none" opacity="0.25"/>'
-        # Chimney
-        '<rect x="16" y="7" width="10" height="13" rx="2" stroke-width="1.8"/>'
-        '<rect x="14" y="5" width="14" height="3.5" rx="1" stroke-width="1.5"/>'
-        # Dome
-        '<ellipse cx="38" cy="20" rx="5" ry="3" stroke-width="1.2" fill="none"/>'
-        # Boiler
-        '<rect x="8" y="20" width="48" height="22" rx="5" stroke-width="2" fill="none"/>'
-        '<line x1="24" y1="20" x2="24" y2="42" stroke-width="0.8" opacity="0.3"/>'
-        '<line x1="40" y1="20" x2="40" y2="42" stroke-width="0.8" opacity="0.3"/>'
-        # Smokebox
-        '<circle cx="8" cy="31" r="7" stroke-width="2" fill="none"/>'
-        '<circle cx="8" cy="31" r="2.5" stroke-width="1" fill="none"/>'
-        # Cabin
-        '<rect x="54" y="12" width="22" height="30" rx="3" stroke-width="2" fill="none"/>'
-        '<path d="M52 12 L78 12 L78 8 Q65 3 52 8 Z" stroke-width="1.5" fill="none"/>'
-        '<rect x="58" y="17" width="6" height="8" rx="1" stroke-width="1.2" fill="none"/>'
-        '<rect x="66" y="17" width="6" height="8" rx="1" stroke-width="1.2" fill="none"/>'
-        # Cowcatcher
-        '<path d="M0 50 L8 42 L8 50 Z" stroke-width="1.2" fill="none"/>'
-        # Chassis
-        '<line x1="0" y1="46" x2="78" y2="46" stroke="#1A1A2E" stroke-width="2"/>'
-        '</svg>'
-        # Loco wheels — absolute below SVG, touching track
-        '<div style="position:absolute;bottom:-4px;left:12px;width:18px;height:18px;border-radius:50%;border:2px solid #1A1A2E;'
-        'background:radial-gradient(circle,#4A90D9 25%,transparent 25%);z-index:3;"></div>'
-        '<div style="position:absolute;bottom:-4px;left:36px;width:18px;height:18px;border-radius:50%;border:2px solid #1A1A2E;'
-        'background:radial-gradient(circle,#4A90D9 25%,transparent 25%);z-index:3;"></div>'
-        '<div style="position:absolute;bottom:-2px;left:64px;width:14px;height:14px;border-radius:50%;border:1.5px solid #1A1A2E;'
-        'background:radial-gradient(circle,#4A90D9 22%,transparent 22%);z-index:3;"></div>'
-        # Coupler
-        '<div style="position:absolute;bottom:8px;right:-5px;width:7px;height:2px;background:#8C939D;z-index:2;"></div>'
-        '</div>'
-        # === WAGON CARDS ===
-        + ''.join([
-            (lambda p, qi: (
-                # Coupler link
-                '<div style="width:3px;height:2px;background:#8C939D;flex-shrink:0;z-index:2;align-self:flex-end;margin-bottom:8px;"></div>'
-                # Wagon
-                '<div style="position:relative;flex-shrink:0;width:124px;z-index:2;">'
-                # Card body
-                '<div style="border-radius:10px;padding:8px 12px;text-align:center;height:60px;display:flex;flex-direction:column;'
-                'justify-content:center;box-sizing:border-box;background:{bg};border:{brd_style};{shadow}">'
-                '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:{lbl};">{q}</div>'
-                '<div style="font-size:14px;font-weight:700;color:#1A1A2E;margin-top:2px;">Rev {rev}</div>'
-                '<div style="font-size:12px;color:#6B7280;">MRR {mrr}</div>'
-                '</div>'
-                # Wheels — absolute, bottom negative to reach track
-                '<div style="position:absolute;bottom:-4px;left:18px;width:14px;height:14px;border-radius:50%;border:1.5px solid #1A1A2E;'
-                'background:radial-gradient(circle,#4A90D9 22%,transparent 22%);z-index:3;"></div>'
-                '<div style="position:absolute;bottom:-4px;right:18px;width:14px;height:14px;border-radius:50%;border:1.5px solid #1A1A2E;'
-                'background:radial-gradient(circle,#4A90D9 22%,transparent 22%);z-index:3;"></div>'
-                # Coupler out
-                '<div style="position:absolute;bottom:8px;right:-5px;width:7px;height:2px;background:#8C939D;z-index:2;"></div>'
-                '</div>'
-            ).format(
-                bg="#EFF6FF" if qi == _current_q else ("#FAFAFA" if p.get("forecast") else "#F7F8FA"),
-                brd_style="2px solid #4A90D9" if qi == _current_q else ("1.5px dashed #E0E0E0" if p.get("forecast") else "1.5px solid #E2E6EC"),
-                shadow="box-shadow:0 0 0 2px rgba(74,144,217,0.15);" if qi == _current_q else ("opacity:0.85;" if p.get("forecast") else ""),
-                lbl="#4A90D9" if qi == _current_q else ("#B0B0B0" if p.get("forecast") else "#8C939D"),
-                q=p["q"] + (" прогноз" if p.get("forecast") else " план"),
-                rev=_short_money(p["revenue"], "М"),
-                mrr=_short_money(p["mrr"], "М") if p["mrr"] >= 1_000_000 else _short_money(p["mrr"], "К").replace("т", "К"),
-            ))(p, i + 1)
-            for i, p in enumerate(QUARTERLY_PLANS)
-        ])
-        + '</div>'
-    )(),
+_header_placeholder.markdown(
+    _build_full_header(
+        period_label=period_label,
+        snapshot_date=filter_date_end.strftime("%d.%m.%Y"),
+        animated=False,
+    ),
     unsafe_allow_html=True,
 )
 
