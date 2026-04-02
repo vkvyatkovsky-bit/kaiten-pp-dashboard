@@ -411,9 +411,9 @@ _components.html("""
             el.textContent = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
         });
     }
-    var _ti = setInterval(function(){
-        if(window.parent.document.getElementById('local-time')){_setTime();clearInterval(_ti);}
-    }, 300);
+    setInterval(function(){
+        _setTime();
+    }, 1000);
 </script>
 """, height=0, width=0)
 
