@@ -514,8 +514,14 @@ def _build_train_html(animated=False):
     )
 
 
-def _build_full_header(period_label, snapshot_date, animated=False):
+def _build_full_header(period_label, snapshot_date, animated=False, data_stale_days=0):
     """Build complete header: title + subtitle + train."""
+    stale_badge = ""
+    if data_stale_days > 1:
+        stale_badge = (
+            f' <span style="font-size:11px;color:#E67E22;background:#FFF3E0;padding:1px 8px;'
+            f'border-radius:4px;font-weight:600;">⚠ данные отстают на {data_stale_days} дн.</span>'
+        )
     return (
         '<div style="display:flex;align-items:center;gap:12px;margin-bottom:0;">'
         '<div style="width:4px;height:42px;background:linear-gradient(180deg,#4A90D9,#66BB6A);border-radius:2px;"></div>'
@@ -527,7 +533,7 @@ def _build_full_header(period_label, snapshot_date, animated=False):
         f'padding:3px 12px;border-radius:6px;white-space:nowrap;">{period_label}</div>'
         '</div>'
         f'<div style="font-size:14px;color:#8C939D;margin-top:2px;">Партнёрский отдел &middot; '
-        f'Снимок данных: {snapshot_date} &middot; '
+        f'Снимок данных: {snapshot_date}{stale_badge} &middot; '
         'Обновлено: <span id="local-time">--:--</span></div>'
         '</div>'
         + _build_train_html(animated=animated)
@@ -754,11 +760,13 @@ PLOTLY_LAYOUT = dict(
 # ──────────────────────────────────────────────
 # HEADER — replace placeholder with real data (static train)
 # ──────────────────────────────────────────────
+_data_stale_days = (date.today() - _data_max).days if _data_max < date.today() else 0
 _header_placeholder.markdown(
     _build_full_header(
         period_label=period_label,
         snapshot_date=filter_date_end.strftime("%d.%m.%Y"),
         animated=False,
+        data_stale_days=_data_stale_days,
     ),
     unsafe_allow_html=True,
 )
