@@ -96,13 +96,18 @@ def load_pipeline():
         "touch_2_date", "touch_2_result",
         "touch_3_date", "touch_3_result",
         "touch_4_date", "touch_4_result",
+        "touch_5_date", "touch_5_result",
     ]
     for i, name in enumerate(touch_cols):
         idx = 8 + i
         if idx < len(df.columns):
             col_map[df.columns[idx]] = name
 
-    if len(df.columns) > 17:
+    # Comments column comes after all touches (index 18 for 5 touches)
+    _comments_idx = 8 + len(touch_cols)
+    if len(df.columns) > _comments_idx:
+        col_map[df.columns[_comments_idx]] = "comments"
+    elif len(df.columns) > 17:
         col_map[df.columns[17]] = "comments"
 
     df = df.rename(columns=col_map)
@@ -115,10 +120,18 @@ def load_pipeline():
     df["status_raw"] = df["status"].fillna("")
     df["status"] = df["status_raw"].str.strip().str.lower().map(STATUS_MAP).fillna("Прочее")
 
-    # Parse touch dates
-    for col in ["touch_1_date", "touch_2_date", "touch_3_date", "touch_4_date"]:
+    # Parse touch dates (handle "23.03" without year → assume current year)
+    _current_year = str(pd.Timestamp.now().year)
+    for col in ["touch_1_date", "touch_2_date", "touch_3_date", "touch_4_date", "touch_5_date"]:
         if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
+            # First try full parse
+            parsed = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
+            # For NaT rows where original value looks like DD.MM — append current year
+            _mask = parsed.isna() & df[col].notna() & df[col].astype(str).str.match(r'^\d{1,2}\.\d{1,2}\.?$')
+            if _mask.any():
+                _with_year = df.loc[_mask, col].astype(str).str.rstrip('.') + '.' + _current_year
+                parsed.loc[_mask] = pd.to_datetime(_with_year, errors="coerce", dayfirst=True)
+            df[col] = parsed
 
     df["manager"] = df["manager"].str.strip()
     df = df.reset_index(drop=True)
@@ -234,7 +247,7 @@ def load_deals():
 
 def _last_touch_date(row):
     """Return the latest non-null touch date for a pipeline row."""
-    for col in ["touch_4_date", "touch_3_date", "touch_2_date", "touch_1_date"]:
+    for col in ["touch_5_date", "touch_4_date", "touch_3_date", "touch_2_date", "touch_1_date"]:
         if col in row.index and pd.notna(row[col]):
             return row[col]
     return pd.NaT
@@ -290,7 +303,7 @@ def build_touches_timeline(df_pipeline):
     records = []
     for _, row in df_pipeline.iterrows():
         manager = row["manager"]
-        for i in range(1, 5):
+        for i in range(1, 6):
             date_col = f"touch_{i}_date"
             if date_col in row.index and pd.notna(row[date_col]):
                 records.append({

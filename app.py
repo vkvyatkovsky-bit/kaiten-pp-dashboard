@@ -565,7 +565,7 @@ st.session_state.data_loaded = True
 from datetime import date, timedelta
 
 _touch_dates = []
-for _col in ["touch_1_date", "touch_2_date", "touch_3_date", "touch_4_date"]:
+for _col in ["touch_1_date", "touch_2_date", "touch_3_date", "touch_4_date", "touch_5_date"]:
     if _col in df_pipe.columns:
         _valid = df_pipe[_col].dropna()
         if len(_valid):
@@ -677,7 +677,7 @@ with st.sidebar:
 import pandas as pd
 
 df_pipe["_latest_touch"] = df_pipe[
-    [c for c in ["touch_1_date", "touch_2_date", "touch_3_date", "touch_4_date"] if c in df_pipe.columns]
+    [c for c in ["touch_1_date", "touch_2_date", "touch_3_date", "touch_4_date", "touch_5_date"] if c in df_pipe.columns]
 ].max(axis=1)
 
 _fds = pd.Timestamp(filter_date_start)
@@ -1108,7 +1108,7 @@ with col_table:
 # STALLED COMPANIES expander
 # ──────────────────────────────────────────────
 # Pre-compute stalled data before expander (for header)
-_touch_date_cols = [c for c in ["touch_4_date", "touch_3_date", "touch_2_date", "touch_1_date"] if c in df_filtered.columns]
+_touch_date_cols = [c for c in ["touch_5_date", "touch_4_date", "touch_3_date", "touch_2_date", "touch_1_date"] if c in df_filtered.columns]
 _touch_result_cols = [c.replace("_date", "_result") for c in _touch_date_cols]
 
 
