@@ -216,7 +216,7 @@ def load_deals():
     # Parse numeric fields (strip spaces from formatted numbers like "6 960 000")
     for col in ["probability", "kp_amount", "planned_amount", "mrr"]:
         if col in df.columns:
-            df[col] = df[col].astype(str).str.replace(r"\s+", "", regex=True)
+            df[col] = df[col].astype(str).str.replace("\u00a0", "", regex=False).str.replace(" ", "", regex=False)
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
     # Use kp_amount as fallback if planned_amount is 0
