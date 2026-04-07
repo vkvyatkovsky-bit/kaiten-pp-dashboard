@@ -1113,6 +1113,193 @@ with col_table:
     """, unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
+# DISCIPLINE & DATA QUALITY
+# ──────────────────────────────────────────────
+section_header("Дисциплина и качество данных",
+    "Управленческие метрики по дисциплине ведения CRM. "
+    "Помогают выявить пробелы в заполнении данных, "
+    "оценить интенсивность работы и скорость конверсии по каждому менеджеру."
+)
+
+_dq_touch_date_cols = [c for c in ["touch_5_date", "touch_4_date", "touch_3_date", "touch_2_date", "touch_1_date"] if c in df_filtered.columns]
+_dq_touch_result_cols = [c.replace("_date", "_result") for c in _dq_touch_date_cols]
+
+_dq_rows = []
+for mgr in selected_managers:
+    d = df_filtered[df_filtered["manager"] == mgr]
+    total = len(d)
+    if total == 0:
+        _dq_rows.append((mgr, 0, "—", 0, 0, 0, 0.0, None))
+        continue
+
+    # 1. Last update date per manager (most recent touch across all their companies)
+    mgr_last_touch = pd.NaT
+    for _, r in d.iterrows():
+        for dc in _dq_touch_date_cols:
+            dv = r.get(dc)
+            if pd.notna(dv):
+                if pd.isna(mgr_last_touch) or dv > mgr_last_touch:
+                    mgr_last_touch = dv
+                break
+
+    # 2. Empty results: touches that have a date but no result text
+    empty_results = 0
+    total_touches = 0
+    for _, r in d.iterrows():
+        for dc, rc in zip(_dq_touch_date_cols, _dq_touch_result_cols):
+            dv = r.get(dc)
+            if pd.notna(dv):
+                total_touches += 1
+                rv = r.get(rc, "")
+                rv_str = str(rv).strip() if pd.notna(rv) else ""
+                if rv_str.lower() in ("", "nan", "nat"):
+                    empty_results += 1
+
+    # 3. Companies in "Прочее" status
+    prochee_count = len(d[d["status"] == "Прочее"])
+
+    # 4. Average touches per company
+    avg_touches = total_touches / total if total > 0 else 0
+
+    # 5. % stalled companies (>7 days without touch)
+    stalled_count = 0
+    for _, r in d.iterrows():
+        last_dt = pd.NaT
+        for dc in _dq_touch_date_cols:
+            dv = r.get(dc)
+            if pd.notna(dv):
+                last_dt = dv
+                break
+        days = (pd.Timestamp.now() - last_dt).days if pd.notna(last_dt) else 999
+        if days > 7:
+            stalled_count += 1
+    stalled_pct = stalled_count / total * 100 if total > 0 else 0
+
+    # 6. Funnel velocity: avg days from first touch to Договор/Подписан
+    converted = d[d["status"].isin(["Договор", "Подписан"])]
+    velocity_days = None
+    if len(converted) > 0:
+        durations = []
+        for _, r in converted.iterrows():
+            # First touch = earliest date
+            first_touch = pd.NaT
+            for dc in reversed(_dq_touch_date_cols):
+                dv = r.get(dc)
+                if pd.notna(dv):
+                    first_touch = dv
+            # Last touch = most recent date
+            last_touch = pd.NaT
+            for dc in _dq_touch_date_cols:
+                dv = r.get(dc)
+                if pd.notna(dv):
+                    last_touch = dv
+                    break
+            if pd.notna(first_touch) and pd.notna(last_touch):
+                durations.append((last_touch - first_touch).days)
+        if durations:
+            velocity_days = sum(durations) / len(durations)
+
+    _dq_rows.append((mgr, total, mgr_last_touch, empty_results, prochee_count, stalled_count, stalled_pct, avg_touches, velocity_days))
+
+# Render table
+_dq_html_rows = ""
+for row in _dq_rows:
+    if len(row) == 8:
+        mgr, total, last_touch, empty_results, prochee, stalled, stalled_pct, vel = row
+        avg_t = 0.0
+    else:
+        mgr, total, last_touch, empty_results, prochee, stalled, stalled_pct, avg_t, vel = row
+
+    clr = MANAGER_COLORS.get(mgr, "#90A4AE")
+
+    # Last update formatting
+    if pd.notna(last_touch):
+        lt_days = (pd.Timestamp.now() - last_touch).days
+        lt_str = last_touch.strftime("%d.%m")
+        lt_cls = "zero" if lt_days > 7 else ("low" if lt_days > 3 else "ok")
+        lt_html = f'<span class="{lt_cls}">{lt_str}</span> <span style="font-size:11px;color:#A0A7B3;">({lt_days}д)</span>'
+    else:
+        lt_html = '<span class="zero">нет данных</span>'
+
+    # Empty results
+    er_cls = "zero" if empty_results > 3 else ("low" if empty_results > 0 else "ok")
+    er_html = f'<span class="{er_cls}">{empty_results}</span>'
+
+    # Прочее
+    pr_cls = "low" if prochee > 0 else ""
+    pr_html = f'<span class="{pr_cls}">{prochee}</span>' if prochee > 0 else "—"
+
+    # Avg touches
+    at_cls = "zero" if avg_t < 1.5 else ("low" if avg_t < 2.5 else "ok")
+    at_html = f'<span class="{at_cls}">{avg_t:.1f}</span>'
+
+    # Stalled %
+    sp_cls = "zero" if stalled_pct > 50 else ("low" if stalled_pct > 25 else "ok")
+    sp_html = f'<span class="{sp_cls}">{stalled_pct:.0f}%</span> <span style="font-size:11px;color:#A0A7B3;">({stalled})</span>'
+
+    # Velocity
+    if vel is not None:
+        v_cls = "ok" if vel < 14 else ("low" if vel < 30 else "zero")
+        vel_html = f'<span class="{v_cls}">{vel:.0f}д</span>'
+    else:
+        vel_html = '<span style="color:#A0A7B3;">—</span>'
+
+    _dq_html_rows += (
+        f'<tr>'
+        f'<td style="white-space:nowrap;">'
+        f'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{clr};margin-right:6px;vertical-align:middle;"></span>'
+        f'<strong>{mgr.split()[0]}</strong>'
+        f' <span style="color:#A0A7B3;">{" ".join(mgr.split()[1:])}</span></td>'
+        f'<td class="num">{lt_html}</td>'
+        f'<td class="num">{er_html}</td>'
+        f'<td class="num">{pr_html}</td>'
+        f'<td class="num">{at_html}</td>'
+        f'<td class="num">{sp_html}</td>'
+        f'<td class="num">{vel_html}</td>'
+        f'</tr>'
+    )
+
+# Totals
+_dq_total_empty = sum(r[3] for r in _dq_rows if len(r) == 9)
+_dq_total_prochee = sum(r[4] for r in _dq_rows if len(r) == 9)
+_dq_total_stalled = sum(r[5] for r in _dq_rows if len(r) == 9)
+_dq_total_companies = sum(r[1] for r in _dq_rows)
+_dq_total_stalled_pct = (_dq_total_stalled / _dq_total_companies * 100) if _dq_total_companies > 0 else 0
+
+_tip_last_upd = info_tip("Дата последнего касания менеджера (по всем компаниям). Красный — обновление > 7 дней назад.", "", "Общий пайп → touch dates")
+_tip_empty_res = info_tip("Количество касаний, у которых есть дата, но не заполнен результат. Признак некачественного ведения CRM.", "", "Общий пайп → result")
+_tip_prochee = info_tip("Компании, чей статус не распознан (попал в «Прочее»). Нужно проставить корректный статус.", "", "Общий пайп → статус")
+_tip_avg_touch = info_tip("Среднее количество касаний на одну компанию. Ниже 1.5 — слабая проработка.", "SUM(касаний) / COUNT(компаний)", "Общий пайп", "tip-left")
+_tip_stalled_pct = info_tip("Доля компаний без касаний более 7 дней. Выше 50% — критическая зона.", "COUNT(>7дн) / Всего × 100%", "Общий пайп", "tip-left")
+_tip_velocity = info_tip("Среднее число дней от первого касания до статуса «Договор / Подписан». Чем меньше — тем быстрее конвертация.", "AVG(last_touch − first_touch) для Договор/Подписан", "Общий пайп", "tip-left")
+
+st.markdown(f"""
+<table class="styled-table">
+    <thead><tr>
+        <th>Менеджер</th>
+        <th class="num">Посл. обновл. {_tip_last_upd}</th>
+        <th class="num">Пустые рез-ты {_tip_empty_res}</th>
+        <th class="num">Без статуса {_tip_prochee}</th>
+        <th class="num">Касан./комп. {_tip_avg_touch}</th>
+        <th class="num">Зависшие {_tip_stalled_pct}</th>
+        <th class="num">Скор. воронки {_tip_velocity}</th>
+    </tr></thead>
+    <tbody>
+        {_dq_html_rows}
+        <tr class="row-total">
+            <td>Итого</td>
+            <td class="num"></td>
+            <td class="num">{_dq_total_empty}</td>
+            <td class="num">{_dq_total_prochee}</td>
+            <td class="num"></td>
+            <td class="num">{_dq_total_stalled_pct:.0f}% ({_dq_total_stalled})</td>
+            <td class="num"></td>
+        </tr>
+    </tbody>
+</table>
+""", unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────
 # STALLED COMPANIES expander
 # ──────────────────────────────────────────────
 # Pre-compute stalled data before expander (for header)
