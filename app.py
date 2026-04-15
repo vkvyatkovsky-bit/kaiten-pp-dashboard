@@ -895,23 +895,39 @@ def _build_progress_html(targets, actuals, disabled=False):
 from datetime import datetime as _dt_cls
 _now = _dt_cls.now()
 _current_q = (_now.month - 1) // 3 + 1  # 1=Q1, 2=Q2, ...
-_q2_disabled = _current_q < 2  # Q2 not started yet (we're in Q1)
+_q1_disabled = _current_q < 1  # never true, kept for symmetry
+_q2_disabled = _current_q < 2  # Q2 not started yet
+
+def _quarter_header(label, state):
+    """state ∈ {'current','past','future'}"""
+    if state == "current":
+        title_color = "#4A90D9"
+        badge = (' <span style="font-size:10px;font-weight:600;color:#fff;background:#4A90D9;'
+                 'border-radius:4px;padding:1px 6px;margin-left:6px;">текущий</span>')
+    elif state == "past":
+        title_color = "#8A95A5"
+        badge = (' <span style="font-size:10px;font-weight:500;color:#6B7280;background:#E8ECF0;'
+                 'border-radius:4px;padding:1px 6px;margin-left:6px;">завершён</span>')
+    else:  # future
+        title_color = "#8A95A5"
+        badge = (' <span style="font-size:10px;font-weight:500;color:#fff;background:#B0BEC5;'
+                 'border-radius:4px;padding:1px 6px;margin-left:6px;">период не начался</span>')
+    return f'<div style="font-size:13px;font-weight:700;color:{title_color};margin-bottom:6px;">{label}{badge}</div>'
+
+_q1_state = "current" if _current_q == 1 else ("past" if _current_q > 1 else "future")
+_q2_state = "current" if _current_q == 2 else ("past" if _current_q > 2 else "future")
 
 col_q1, col_q2 = st.columns(2, gap="medium")
 with col_q1:
     st.markdown(
-        '<div style="font-size:13px;font-weight:700;color:#4A90D9;margin-bottom:6px;">Q1 2026 (янв–мар)</div>'
-        + _build_progress_html(TARGETS_Q1, _actuals),
+        _quarter_header("Q1 2026 (янв–мар)", _q1_state)
+        + _build_progress_html(TARGETS_Q1, _actuals, disabled=(_q1_state == "future")),
         unsafe_allow_html=True,
     )
 with col_q2:
-    _q2_label = 'Q2 2026 (апр–июн)'
-    _q2_badge = (' <span style="font-size:10px;font-weight:500;color:#fff;background:#B0BEC5;'
-                 'border-radius:4px;padding:1px 6px;margin-left:6px;">период не начался</span>'
-                 if _q2_disabled else '')
     st.markdown(
-        f'<div style="font-size:13px;font-weight:700;color:#6B7280;margin-bottom:6px;">{_q2_label}{_q2_badge}</div>'
-        + _build_progress_html(TARGETS_Q2, _actuals, disabled=_q2_disabled),
+        _quarter_header("Q2 2026 (апр–июн)", _q2_state)
+        + _build_progress_html(TARGETS_Q2, _actuals, disabled=(_q2_state == "future")),
         unsafe_allow_html=True,
     )
 
