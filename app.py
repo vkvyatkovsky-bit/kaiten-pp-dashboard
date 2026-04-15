@@ -1573,6 +1573,29 @@ else:
         else:
             nstep_html = '<span style="color:#A0A7B3;">—</span>'
 
+        # Ответственные: BDM (partner_manager) + Sales (sales_manager)
+        def _clean_name(v):
+            s = str(v).strip() if pd.notna(v) else ""
+            return s if s and s.lower() != "nan" else ""
+        bdm_name = _clean_name(row.get("partner_manager"))
+        sales_name = _clean_name(row.get("sales_manager"))
+        owners_parts = []
+        if bdm_name:
+            owners_parts.append(
+                f'<span style="font-size:11px;color:#A0A7B3;">BDM:</span> '
+                f'<span style="color:#2D3748;">{bdm_name}</span>'
+            )
+        if sales_name:
+            _sales_label = team if team in ("KAM", "CSM") else "Прод"
+            owners_parts.append(
+                f'<span style="font-size:11px;color:#A0A7B3;">{_sales_label}:</span> '
+                f'<span style="color:#2D3748;">{sales_name}</span>'
+            )
+        if owners_parts:
+            owners_html = '<br>'.join(owners_parts)
+        else:
+            owners_html = '<span style="color:#A0A7B3;">—</span>'
+
         # Client details (industry + segment)
         industry = row.get("industry", "")
         segment = row.get("segment", "")
@@ -1587,6 +1610,7 @@ else:
             f'<tr{row_style}>'
             f'<td><strong>{partner}</strong>{team_badge}{paid_icon}{risk_icon}</td>'
             f'<td>{client}{client_extra}</td>'
+            f'<td>{owners_html}</td>'
             f'<td>{deal_badge(stage)}</td>'
             f'<td class="num">{planned_fmt}</td>'
             f'<td class="num">{prob_cell(prob)}</td>'
@@ -1605,6 +1629,7 @@ else:
     _dtip_stage = info_tip("Текущий этап сделки.", "Сделки → «Этап сделки»", "xlsx")
     _dtip_days = info_tip("Дней с момента поступления лида.", "Сегодня − Дата поступления", "расчётная", "tip-left")
     _dtip_nstep = info_tip("Следующий шаг и дата. Красный = просрочен.", "Сделки → «Следующий шаг» + «Дата»", "xlsx", "tip-left")
+    _dtip_owners = info_tip("Ответственные за сделку: BDM со стороны партнёрки и менеджер продаж (KAM/CSM) со стороны продаж.", "Сделки → «Отв. партнёрки» + «Отв. продаж»", "xlsx")
 
     # Avg metrics
     _active = df_deals_filtered[~df_deals_filtered["deal_stage"].astype(str).str.lower().str.contains("проиграно|оплачено", na=False)]
@@ -1615,14 +1640,14 @@ else:
         st.markdown(f"""
         <table class="styled-table">
             <thead><tr>
-                <th>Партнёр</th><th>Клиент</th><th>Этап {_dtip_stage}</th>
+                <th>Партнёр</th><th>Клиент</th><th>Ответственные {_dtip_owners}</th><th>Этап {_dtip_stage}</th>
                 <th class="num">Сумма {_dtip_sum}</th><th class="num">Вер. {_dtip_prob}</th>
                 <th class="num">Дни {_dtip_days}</th><th>След. шаг {_dtip_nstep}</th>
             </tr></thead>
             <tbody>
                 {deal_rows}
                 <tr class="row-total">
-                    <td colspan="3">Итого &middot; Взвеш: {total_weighted_fmt} {info_tip("SUM(Сумма × Вероятность / 100)", "", "расчётная")}</td>
+                    <td colspan="4">Итого &middot; Взвеш: {total_weighted_fmt} {info_tip("SUM(Сумма × Вероятность / 100)", "", "расчётная")}</td>
                     <td class="num">{total_planned_fmt}</td>
                     <td colspan="3"></td>
                 </tr>
