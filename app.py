@@ -1718,10 +1718,10 @@ else:
 # ACTIVITY DYNAMICS — full width, chart + mini-table side by side
 # ──────────────────────────────────────────────
 section_header("Динамика активности",
-    "Количество касаний (звонки, письма, встречи) по неделям в разрезе менеджеров. "
-    "Показывает интенсивность обработки пайплайна. "
-    '<b>Формула:</b> COUNT(касаний) GROUP BY неделя, менеджер. '
-    '<b>Источник:</b> Общий пайп → кол. «Касание 1–4 (Дата)»'
+    "Количество касаний (звонки, письма, встречи) по дням на графике и по неделям в таблице под ним. "
+    "Показывает интенсивность обработки пайплайна и ритм работы. "
+    '<b>Формула:</b> график — COUNT(касаний) GROUP BY день, менеджер; таблица — по неделям. '
+    '<b>Источник:</b> Общий пайп → кол. «Касание N (Дата)»'
 )
 
 if df_timeline.empty:
@@ -1739,18 +1739,33 @@ else:
             unsafe_allow_html=True,
         )
     else:
+        # Daily data for the chart — normalize timestamps to midnight so
+        # repeat touches on the same day collapse onto one x position.
+        df_tl_daily = df_tl.copy()
+        df_tl_daily["day"] = df_tl_daily["date"].dt.normalize()
+        daily = df_tl_daily.groupby(["day", "manager"]).size().reset_index(name="touches")
+
+        # Fill zero days across the full range so lines don't jump over gaps
+        if not daily.empty:
+            _day_min, _day_max = daily["day"].min(), daily["day"].max()
+            _all_days = pd.date_range(_day_min, _day_max, freq="D")
+            _full_idx = pd.MultiIndex.from_product(
+                [_all_days, selected_managers], names=["day", "manager"]
+            )
+            daily = daily.set_index(["day", "manager"]).reindex(_full_idx, fill_value=0).reset_index()
+
         weekly = df_tl.groupby(["week", "manager"]).size().reset_index(name="touches")
 
-        # Chart — full width
+        # Chart — daily granularity
         fig_activity = go.Figure()
         for mgr in selected_managers:
-            mgr_weekly = weekly[weekly["manager"] == mgr].sort_values("week")
+            mgr_daily = daily[daily["manager"] == mgr].sort_values("day")
             color = MANAGER_COLORS.get(mgr, "#90A4AE")
             r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
             fig_activity.add_trace(go.Scatter(
-                x=mgr_weekly["week"], y=mgr_weekly["touches"], name=mgr.split()[0],
+                x=mgr_daily["day"], y=mgr_daily["touches"], name=mgr.split()[0],
                 mode="lines+markers",
-                line=dict(color=color, width=2.5), marker=dict(size=6, color=color),
+                line=dict(color=color, width=2), marker=dict(size=5, color=color),
                 fill="tozeroy", fillcolor=f"rgba({r},{g},{b},0.07)",
                 hovertemplate="<b>%{x|%d.%m.%Y}</b><br>Касаний: %{y}<extra>%{fullData.name}</extra>",
             ))
@@ -1758,8 +1773,8 @@ else:
         fig_activity.update_layout(
             **PLOTLY_LAYOUT, height=300,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font_size=11),
-            xaxis=dict(showgrid=False, tickformat="%d %b", title=""),
-            yaxis=dict(showgrid=True, gridcolor="#F0F1F3", zeroline=False, title="Касаний", title_font_size=11),
+            xaxis=dict(showgrid=False, tickformat="%d %b", title="", dtick=86400000.0 * 7),
+            yaxis=dict(showgrid=True, gridcolor="#F0F1F3", zeroline=False, title="Касаний/день", title_font_size=11),
             hovermode="x unified",
         )
         st.plotly_chart(fig_activity, use_container_width=True)
