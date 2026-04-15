@@ -679,21 +679,26 @@ with st.sidebar:
 # ──────────────────────────────────────────────
 # Apply filters (manager + status + date period)
 # ──────────────────────────────────────────────
-# Find latest touch date per row for date filtering
+# _latest_touch — informational "most recent touch per company" (used elsewhere
+# in the UI). The period filter itself checks whether ANY touch falls inside
+# the range, so a company touched in both March and April is still included
+# when "Прошлый месяц" is selected.
 import pandas as pd
 
-df_pipe["_latest_touch"] = df_pipe[
-    [c for c in df_pipe.columns if isinstance(c, str) and c.startswith("touch_") and c.endswith("_date")]
-].max(axis=1)
+_all_touch_cols = [c for c in df_pipe.columns if isinstance(c, str) and c.startswith("touch_") and c.endswith("_date")]
+df_pipe["_latest_touch"] = df_pipe[_all_touch_cols].max(axis=1)
 
 _fds = pd.Timestamp(filter_date_start)
 _fde = pd.Timestamp(filter_date_end)
 
-# NaT rows included only when "Всё время" is selected (full date range)
 _is_full_range = (filter_date_start == _data_min and filter_date_end == _data_max)
-_date_mask = (df_pipe["_latest_touch"] >= _fds) & (df_pipe["_latest_touch"] <= _fde)
 if _is_full_range:
-    _date_mask = _date_mask | df_pipe["_latest_touch"].isna()
+    _date_mask = pd.Series(True, index=df_pipe.index)
+else:
+    _date_mask = pd.Series(False, index=df_pipe.index)
+    for _tc in _all_touch_cols:
+        _col = df_pipe[_tc]
+        _date_mask = _date_mask | ((_col >= _fds) & (_col <= _fde))
 
 mask = (
     df_pipe["manager"].isin(selected_managers)
