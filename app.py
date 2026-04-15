@@ -1133,7 +1133,7 @@ for mgr in selected_managers:
     d = df_filtered[df_filtered["manager"] == mgr]
     total = len(d)
     if total == 0:
-        _dq_rows.append((mgr, 0, "—", 0, 0, 0, 0.0, 0.0, None, 0, 0.0, None, None))
+        _dq_rows.append((mgr, 0, pd.NaT, 0, 0, 0, 0.0, 0.0, None, 0, 0.0, None, None))
         continue
 
     # 1. Last update date per manager (most recent touch across all their companies)
