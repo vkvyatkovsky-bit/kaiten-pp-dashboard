@@ -1165,8 +1165,11 @@ for mgr in selected_managers:
     # 4. Average touches per company
     avg_touches = total_touches / total if total > 0 else 0
 
-    # 5. % stalled companies (>7 days without touch)
+    # 5. Cadence buckets per company based on most recent touch:
+    #    - stalled: 8–30 days since last touch (cadence slip, not abandoned)
+    #    - abandoned: >30 days since last touch OR no touches at all (really dropped)
     stalled_count = 0
+    abandoned_count = 0
     for _, r in d.iterrows():
         last_dt = pd.NaT
         for dc in _dq_touch_date_cols:
@@ -1174,10 +1177,16 @@ for mgr in selected_managers:
             if pd.notna(dv):
                 last_dt = dv
                 break
-        days = (pd.Timestamp.now() - last_dt).days if pd.notna(last_dt) else 999
-        if days > 7:
+        if pd.isna(last_dt):
+            abandoned_count += 1
+            continue
+        days = (pd.Timestamp.now() - last_dt).days
+        if days > 30:
+            abandoned_count += 1
+        elif days > 7:
             stalled_count += 1
     stalled_pct = stalled_count / total * 100 if total > 0 else 0
+    abandoned_pct = abandoned_count / total * 100 if total > 0 else 0
 
     # 6. Funnel velocity: avg days from first touch to Договор/Подписан
     converted = d[d["status"].isin(["Договор", "Подписан"])]
@@ -1203,16 +1212,12 @@ for mgr in selected_managers:
         if durations:
             velocity_days = sum(durations) / len(durations)
 
-    _dq_rows.append((mgr, total, mgr_last_touch, empty_results, prochee_count, stalled_count, stalled_pct, avg_touches, velocity_days))
+    _dq_rows.append((mgr, total, mgr_last_touch, empty_results, prochee_count, stalled_count, stalled_pct, avg_touches, velocity_days, abandoned_count, abandoned_pct))
 
 # Render table
 _dq_html_rows = ""
 for row in _dq_rows:
-    if len(row) == 8:
-        mgr, total, last_touch, empty_results, prochee, stalled, stalled_pct, vel = row
-        avg_t = 0.0
-    else:
-        mgr, total, last_touch, empty_results, prochee, stalled, stalled_pct, avg_t, vel = row
+    mgr, total, last_touch, empty_results, prochee, stalled, stalled_pct, avg_t, vel, abandoned, abandoned_pct = row
 
     clr = MANAGER_COLORS.get(mgr, "#90A4AE")
 
@@ -1237,9 +1242,16 @@ for row in _dq_rows:
     at_cls = "zero" if avg_t < 1.5 else ("low" if avg_t < 2.5 else "ok")
     at_html = f'<span class="{at_cls}">{avg_t:.1f}</span>'
 
-    # Stalled %
+    # Stalled % (8–30 days — cadence slip)
     sp_cls = "zero" if stalled_pct > 50 else ("low" if stalled_pct > 25 else "ok")
     sp_html = f'<span class="{sp_cls}">{stalled_pct:.0f}%</span> <span style="font-size:11px;color:#A0A7B3;">({stalled})</span>'
+
+    # Abandoned % (>30 days or no touches — real drop-off)
+    ab_cls = "zero" if abandoned_pct > 20 else ("low" if abandoned_pct > 5 else "ok")
+    if abandoned > 0:
+        ab_html = f'<span class="{ab_cls}">{abandoned_pct:.0f}%</span> <span style="font-size:11px;color:#A0A7B3;">({abandoned})</span>'
+    else:
+        ab_html = '<span class="ok">—</span>'
 
     # Velocity
     if vel is not None:
@@ -1259,22 +1271,26 @@ for row in _dq_rows:
         f'<td class="num">{pr_html}</td>'
         f'<td class="num">{at_html}</td>'
         f'<td class="num">{sp_html}</td>'
+        f'<td class="num">{ab_html}</td>'
         f'<td class="num">{vel_html}</td>'
         f'</tr>'
     )
 
 # Totals
-_dq_total_empty = sum(r[3] for r in _dq_rows if len(r) == 9)
-_dq_total_prochee = sum(r[4] for r in _dq_rows if len(r) == 9)
-_dq_total_stalled = sum(r[5] for r in _dq_rows if len(r) == 9)
+_dq_total_empty = sum(r[3] for r in _dq_rows)
+_dq_total_prochee = sum(r[4] for r in _dq_rows)
+_dq_total_stalled = sum(r[5] for r in _dq_rows)
+_dq_total_abandoned = sum(r[9] for r in _dq_rows)
 _dq_total_companies = sum(r[1] for r in _dq_rows)
 _dq_total_stalled_pct = (_dq_total_stalled / _dq_total_companies * 100) if _dq_total_companies > 0 else 0
+_dq_total_abandoned_pct = (_dq_total_abandoned / _dq_total_companies * 100) if _dq_total_companies > 0 else 0
 
 _tip_last_upd = info_tip("Дата последнего касания менеджера (по всем компаниям). Красный — обновление > 7 дней назад.", "", "Общий пайп → touch dates")
 _tip_empty_res = info_tip("Количество касаний, у которых есть дата, но не заполнен результат. Признак некачественного ведения CRM.", "", "Общий пайп → result")
 _tip_prochee = info_tip("Компании, чей статус не распознан (попал в «Прочее»). Нужно проставить корректный статус.", "", "Общий пайп → статус")
 _tip_avg_touch = info_tip("Среднее количество касаний на одну компанию. Ниже 1.5 — слабая проработка.", "SUM(касаний) / COUNT(компаний)", "Общий пайп", "tip-left")
-_tip_stalled_pct = info_tip("Доля компаний без касаний более 7 дней. Выше 50% — критическая зона.", "COUNT(>7дн) / Всего × 100%", "Общий пайп", "tip-left")
+_tip_stalled_pct = info_tip("Доля компаний, где последнее касание было 8–30 дней назад. Просадка каденции — нужно вернуться ко второму кругу.", "COUNT(8–30дн) / Всего × 100%", "Общий пайп", "tip-left")
+_tip_abandoned = info_tip("Доля компаний без касаний более 30 дней (или совсем без касаний). Реальная заброшенность — требует разбора: работать или закрывать.", "COUNT(>30дн ∪ нет касаний) / Всего × 100%", "Общий пайп", "tip-left")
 _tip_velocity = info_tip("Среднее число дней от первого касания до статуса «Договор / Подписан». Чем меньше — тем быстрее конвертация.", "AVG(last_touch − first_touch) для Договор/Подписан", "Общий пайп", "tip-left")
 
 st.markdown(f"""
@@ -1285,7 +1301,8 @@ st.markdown(f"""
         <th class="num">Пустые рез-ты {_tip_empty_res}</th>
         <th class="num">Без статуса {_tip_prochee}</th>
         <th class="num">Касан./комп. {_tip_avg_touch}</th>
-        <th class="num">Зависшие {_tip_stalled_pct}</th>
+        <th class="num">Зависшие 8–30д {_tip_stalled_pct}</th>
+        <th class="num">Заброшено >30д {_tip_abandoned}</th>
         <th class="num">Скор. воронки {_tip_velocity}</th>
     </tr></thead>
     <tbody>
@@ -1297,6 +1314,7 @@ st.markdown(f"""
             <td class="num">{_dq_total_prochee}</td>
             <td class="num"></td>
             <td class="num">{_dq_total_stalled_pct:.0f}% ({_dq_total_stalled})</td>
+            <td class="num">{_dq_total_abandoned_pct:.0f}% ({_dq_total_abandoned})</td>
             <td class="num"></td>
         </tr>
     </tbody>
