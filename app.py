@@ -1416,8 +1416,14 @@ def _safe_val(series, key, default=""):
         return default
 
 
+# Exclude terminal statuses — no point nagging closed/rejected companies:
+# already-won ("Договор", "Подписан"), already-refused ("Не интересно"),
+# explicitly parked ("Не обрабатываем").
+_TERMINAL_STATUSES = {"Договор", "Подписан", "Не интересно", "Не обрабатываем"}
+_df_stalled_src = df_filtered[~df_filtered["status"].isin(_TERMINAL_STATUSES)]
+
 stalled_rows = []
-for _, r in df_filtered.iterrows():
+for _, r in _df_stalled_src.iterrows():
     last_date = None
     last_result = ""
     for dc, rc in zip(_touch_date_cols, _touch_result_cols):
