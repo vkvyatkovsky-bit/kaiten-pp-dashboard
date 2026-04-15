@@ -1730,7 +1730,13 @@ if df_timeline.empty:
         unsafe_allow_html=True,
     )
 else:
-    df_tl = df_timeline[df_timeline["manager"].isin(selected_managers)]
+    _tl_fds = pd.Timestamp(filter_date_start)
+    _tl_fde = pd.Timestamp(filter_date_end) + pd.Timedelta(hours=23, minutes=59, seconds=59)
+    df_tl = df_timeline[
+        df_timeline["manager"].isin(selected_managers)
+        & (df_timeline["date"] >= _tl_fds)
+        & (df_timeline["date"] <= _tl_fde)
+    ]
 
     if df_tl.empty:
         st.markdown(
