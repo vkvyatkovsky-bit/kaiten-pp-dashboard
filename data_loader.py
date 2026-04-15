@@ -114,7 +114,21 @@ def load_pipeline():
 
     # Normalize statuses
     df["status_raw"] = df["status"].fillna("")
-    df["status"] = df["status_raw"].str.strip().str.lower().map(STATUS_MAP).fillna("Прочее")
+    _norm = df["status_raw"].str.strip().str.lower()
+    df["status"] = _norm.map(STATUS_MAP)
+    # Substring fallback: catch new wordings not listed in STATUS_MAP explicitly
+    _missing = df["status"].isna() & _norm.ne("")
+    if _missing.any():
+        _m = _norm[_missing]
+        _guess = pd.Series("Прочее", index=_m.index)
+        _guess[_m.str.contains("подписан", na=False)] = "Подписан"
+        _guess[_m.str.contains("договор", na=False)] = "Договор"
+        _guess[_m.str.contains("не интересн", na=False)] = "Не интересно"
+        _guess[_m.str.contains("не обрабат", na=False)] = "Не обрабатываем"
+        _guess[_m.str.contains("рассмотр", na=False)] = "На рассмотрении"
+        _guess[_m.str.contains("нет ос|без ос|нет ответ", na=False, regex=True)] = "Нет ОС"
+        df.loc[_missing, "status"] = _guess
+    df["status"] = df["status"].fillna("Прочее")
 
     # Parse touch dates (handle "23.03" without year → assume current year)
     _current_year = str(pd.Timestamp.now().year)
