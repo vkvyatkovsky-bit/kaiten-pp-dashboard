@@ -91,24 +91,20 @@ def load_pipeline():
         df.columns[6]: "city",
         df.columns[7]: "status",
     }
-    touch_cols = [
-        "touch_1_date", "touch_1_result",
-        "touch_2_date", "touch_2_result",
-        "touch_3_date", "touch_3_result",
-        "touch_4_date", "touch_4_result",
-        "touch_5_date", "touch_5_result",
-    ]
+    # Detect touch pairs dynamically: columns after the first 8 (meta) come
+    # in (date, result) pairs, optionally followed by a single "comments" col.
+    _n_touches = max(0, (len(df.columns) - 8) // 2)
+    touch_cols = []
+    for i in range(1, _n_touches + 1):
+        touch_cols.extend([f"touch_{i}_date", f"touch_{i}_result"])
     for i, name in enumerate(touch_cols):
         idx = 8 + i
         if idx < len(df.columns):
             col_map[df.columns[idx]] = name
 
-    # Comments column comes after all touches (index 18 for 5 touches)
-    _comments_idx = 8 + len(touch_cols)
+    _comments_idx = 8 + 2 * _n_touches
     if len(df.columns) > _comments_idx:
         col_map[df.columns[_comments_idx]] = "comments"
-    elif len(df.columns) > 17:
-        col_map[df.columns[17]] = "comments"
 
     df = df.rename(columns=col_map)
 
@@ -122,7 +118,8 @@ def load_pipeline():
 
     # Parse touch dates (handle "23.03" without year → assume current year)
     _current_year = str(pd.Timestamp.now().year)
-    for col in ["touch_1_date", "touch_2_date", "touch_3_date", "touch_4_date", "touch_5_date"]:
+    _date_cols = [c for c in df.columns if c.startswith("touch_") and c.endswith("_date")]
+    for col in _date_cols:
         if col in df.columns:
             # First try full parse
             parsed = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
@@ -247,8 +244,13 @@ def load_deals():
 
 def _last_touch_date(row):
     """Return the latest non-null touch date for a pipeline row."""
-    for col in ["touch_5_date", "touch_4_date", "touch_3_date", "touch_2_date", "touch_1_date"]:
-        if col in row.index and pd.notna(row[col]):
+    _cols = sorted(
+        [c for c in row.index if isinstance(c, str) and c.startswith("touch_") and c.endswith("_date")],
+        key=lambda c: int(c.split("_")[1]),
+        reverse=True,
+    )
+    for col in _cols:
+        if pd.notna(row[col]):
             return row[col]
     return pd.NaT
 
@@ -301,11 +303,14 @@ def compute_bdm_kpi(df_pipeline, df_deals, manager_name, year_month=None):
 def build_touches_timeline(df_pipeline):
     """Build a timeline of all touches for activity dynamics chart."""
     records = []
+    _date_cols = [
+        c for c in df_pipeline.columns
+        if isinstance(c, str) and c.startswith("touch_") and c.endswith("_date")
+    ]
     for _, row in df_pipeline.iterrows():
         manager = row["manager"]
-        for i in range(1, 6):
-            date_col = f"touch_{i}_date"
-            if date_col in row.index and pd.notna(row[date_col]):
+        for date_col in _date_cols:
+            if pd.notna(row[date_col]):
                 records.append({
                     "manager": manager,
                     "date": row[date_col],

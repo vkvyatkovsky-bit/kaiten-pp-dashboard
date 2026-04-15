@@ -570,12 +570,12 @@ st.session_state.data_loaded = True
 # ──────────────────────────────────────────────
 from datetime import date, timedelta
 
+_touch_date_cols_all = [c for c in df_pipe.columns if isinstance(c, str) and c.startswith("touch_") and c.endswith("_date")]
 _touch_dates = []
-for _col in ["touch_1_date", "touch_2_date", "touch_3_date", "touch_4_date", "touch_5_date"]:
-    if _col in df_pipe.columns:
-        _valid = df_pipe[_col].dropna()
-        if len(_valid):
-            _touch_dates.extend(_valid.tolist())
+for _col in _touch_date_cols_all:
+    _valid = df_pipe[_col].dropna()
+    if len(_valid):
+        _touch_dates.extend(_valid.tolist())
 
 if _touch_dates:
     _data_min = min(_touch_dates).date() if hasattr(min(_touch_dates), 'date') else min(_touch_dates)
@@ -683,7 +683,7 @@ with st.sidebar:
 import pandas as pd
 
 df_pipe["_latest_touch"] = df_pipe[
-    [c for c in ["touch_1_date", "touch_2_date", "touch_3_date", "touch_4_date", "touch_5_date"] if c in df_pipe.columns]
+    [c for c in df_pipe.columns if isinstance(c, str) and c.startswith("touch_") and c.endswith("_date")]
 ].max(axis=1)
 
 _fds = pd.Timestamp(filter_date_start)
@@ -1121,7 +1121,11 @@ section_header("Дисциплина и качество данных",
     "оценить интенсивность работы и скорость конверсии по каждому менеджеру."
 )
 
-_dq_touch_date_cols = [c for c in ["touch_5_date", "touch_4_date", "touch_3_date", "touch_2_date", "touch_1_date"] if c in df_filtered.columns]
+_dq_touch_date_cols = sorted(
+    [c for c in df_filtered.columns if isinstance(c, str) and c.startswith("touch_") and c.endswith("_date")],
+    key=lambda c: int(c.split("_")[1]),
+    reverse=True,
+)
 _dq_touch_result_cols = [c.replace("_date", "_result") for c in _dq_touch_date_cols]
 
 _dq_rows = []
@@ -1303,7 +1307,11 @@ st.markdown(f"""
 # STALLED COMPANIES expander
 # ──────────────────────────────────────────────
 # Pre-compute stalled data before expander (for header)
-_touch_date_cols = [c for c in ["touch_5_date", "touch_4_date", "touch_3_date", "touch_2_date", "touch_1_date"] if c in df_filtered.columns]
+_touch_date_cols = sorted(
+    [c for c in df_filtered.columns if isinstance(c, str) and c.startswith("touch_") and c.endswith("_date")],
+    key=lambda c: int(c.split("_")[1]),
+    reverse=True,
+)
 _touch_result_cols = [c.replace("_date", "_result") for c in _touch_date_cols]
 
 
