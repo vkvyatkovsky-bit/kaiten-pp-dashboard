@@ -29,6 +29,8 @@ from data_loader import (
     build_touches_timeline,
     compute_bdm_kpi,
 )
+from ui_helpers import section_header, info_tip, fmt_money, _short_money
+from weekly_page import render_weekly_summary
 
 # ──────────────────────────────────────────────
 # Page config
@@ -368,6 +370,55 @@ header[data-testid="stHeader"] {background: transparent !important; backdrop-fil
     font-size: 13px;
     padding: 8px 0 2px 0;
 }
+
+/* ── Page navigation: radio styled as tabs ── */
+div[data-testid="stRadio"][aria-label="Страница"] > label,
+.stRadio > label {
+    /* label is hidden via Streamlit, but reset any residual */
+    display: none !important;
+}
+div[data-testid="stMainBlockContainer"] div.stRadio[role] > div {
+    gap: 0 !important;
+}
+/* Only style the first (page-nav) radio — scoped via session_state key */
+div[data-testid="stMainBlockContainer"] > div > div > div > div > div > div.stRadio > div[role="radiogroup"] {
+    display: flex;
+    flex-direction: row !important;
+    gap: 0 !important;
+    border-bottom: 2px solid #E2E6EC;
+    padding: 0 !important;
+    margin: 2px 0 10px 0;
+}
+/* Individual tab option */
+div.stRadio > div[role="radiogroup"] > label {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 3px solid transparent !important;
+    border-radius: 0 !important;
+    padding: 10px 22px 8px 22px !important;
+    margin: 0 4px -2px 0 !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: #8C939D !important;
+    cursor: pointer !important;
+    transition: color 0.15s, border-color 0.15s;
+}
+div.stRadio > div[role="radiogroup"] > label:hover {
+    color: #4A90D9 !important;
+}
+/* Active tab */
+div.stRadio > div[role="radiogroup"] > label[data-checked="true"],
+div.stRadio > div[role="radiogroup"] > label:has(input:checked) {
+    color: #1A1A2E !important;
+    border-bottom-color: #4A90D9 !important;
+    background: #EBF0FA !important;
+    border-top-left-radius: 6px !important;
+    border-top-right-radius: 6px !important;
+}
+/* Hide radio circle */
+div.stRadio > div[role="radiogroup"] > label > div:first-child {
+    display: none !important;
+}
 /* ── Train loading animation ── */
 @keyframes trainSlideIn {
     0%   { transform: translateX(120%); }
@@ -420,13 +471,8 @@ _components.html("""
 # ──────────────────────────────────────────────
 # Pre-load helpers (needed for header before data loads)
 # ──────────────────────────────────────────────
-def _short_money(val, suffix="м"):
-    """Format money as short string: 1500000 -> '1.5м', 500000 -> '500т'."""
-    if abs(val) >= 1_000_000:
-        r = val / 1_000_000
-        return f'{r:.1f}{suffix}'.replace('.0' + suffix, suffix)
-    return f'{val / 1_000:.0f}т'
-
+# _short_money / fmt_money / info_tip / section_header вынесены в ui_helpers.py
+# (импортируются выше).
 
 
 def _build_train_html(animated=False):
@@ -708,33 +754,42 @@ mask = (
 df_filtered = df_pipe[mask]
 
 # ──────────────────────────────────────────────
+# Page navigation (tab-styled radio)
+# ──────────────────────────────────────────────
+_tab_overview_label = "📊 Обзор"
+_tab_weekly_label = "📅 Итоги недели · 30 дней"
+
+st.markdown(
+    '<div style="margin:4px 0 6px 0;border-bottom:1px solid #E2E6EC;"></div>',
+    unsafe_allow_html=True,
+)
+_active_page = st.radio(
+    "Страница",
+    options=[_tab_overview_label, _tab_weekly_label],
+    horizontal=True,
+    label_visibility="collapsed",
+    key="active_page_tab",
+)
+
+if _active_page == _tab_weekly_label:
+    render_weekly_summary(
+        df_pipe=df_pipe,
+        df_deals=df_deals,
+        df_timeline=df_timeline,
+        selected_managers=selected_managers,
+        today=_data_max,
+    )
+    st.markdown(
+        '<div class="footer-text" style="margin-top:16px;">'
+        'Пайп партнёров Кайтен · Dashboard v2.5 · «Итоги недели»</div>',
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
+# ──────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────
-def fmt_money(val):
-    if val >= 1_000_000:
-        return f'{val/1_000_000:.1f}<span class="unit">млн ₽</span>'
-    if val >= 1_000:
-        return f'{val:,.0f}<span class="unit"> ₽</span>'.replace(",", " ")
-    return f'{val:.0f}<span class="unit"> ₽</span>'
-
-
-def info_tip(desc, formula="", source="", tip_cls=""):
-    """Return HTML for (i) tooltip icon."""
-    body = desc
-    if formula:
-        body += f'<span class="tip-formula">{formula}</span>'
-    if source:
-        body += f'<span class="tip-src">Источник: {source}</span>'
-    return (
-        f'<span class="info-tip {tip_cls}">'
-        f'i<span class="tip-body">{body}</span>'
-        f'</span>'
-    )
-
-
-def section_header(text, tooltip=""):
-    tip = info_tip(tooltip) if tooltip else ""
-    st.markdown(f'<div class="section-hdr">{text} {tip}</div>', unsafe_allow_html=True)
+# fmt_money / info_tip / section_header вынесены в ui_helpers.py (импорт выше).
 
 
 def conv_color_class(pct):
@@ -1851,7 +1906,8 @@ else:
 # BDM PERSONAL KPI
 # ──────────────────────────────────────────────
 section_header("Персональные KPI BDM",
-    "Помесячная динамика выполнения KPI каждым BDM-менеджером. "
+    "Карточки сверху — <b>факт текущего месяца</b> vs месячная цель. "
+    "Таблица ниже — помесячная динамика с квартальными итогами. "
     "<b>Активированные</b> = статус «Договор» или «Подписан» (дата = последнее касание). "
     "<b>Первая продажа</b> = уникальные партнёры с оплаченной сделкой (team=BDM). "
     "<b>Выручка</b> = сумма оплаченных сделок BDM. "
@@ -1867,6 +1923,13 @@ _month_labels = {
     (2026, 1): "Янв", (2026, 2): "Фев", (2026, 3): "Мар",
     (2026, 4): "Апр", (2026, 5): "Май", (2026, 6): "Июн",
 }
+_month_labels_full = {
+    1: "Январь", 2: "Февраль", 3: "Март", 4: "Апрель",
+    5: "Май", 6: "Июнь", 7: "Июль", 8: "Август",
+    9: "Сентябрь", 10: "Октябрь", 11: "Ноябрь", 12: "Декабрь",
+}
+_current_ym = (_now.year, _now.month)
+_current_month_label = f"{_month_labels_full[_now.month]} {_now.year}"
 
 _bdm_cols = st.columns(3, gap="medium")
 for idx, mgr in enumerate(BDM_MANAGERS):
@@ -1874,8 +1937,8 @@ for idx, mgr in enumerate(BDM_MANAGERS):
         _mgr_short = mgr.split()[0]
         _mgr_color = MANAGER_COLORS.get(mgr, "#6B7280")
 
-        # Current totals (all time / current period)
-        _kpi_total = compute_bdm_kpi(df_filtered, df_deals, mgr)
+        # Current totals — за ТЕКУЩИЙ МЕСЯЦ (сравниваем с месячным таргетом)
+        _kpi_total = compute_bdm_kpi(df_filtered, df_deals, mgr, year_month=_current_ym)
 
         # Build progress bars for current totals
         _bdm_bars = ""
@@ -1907,8 +1970,10 @@ for idx, mgr in enumerate(BDM_MANAGERS):
         st.markdown(
             f'<div style="background:#fff;border:1px solid #E2E6EC;border-radius:10px;padding:14px 16px;'
             f'border-top:3px solid {_mgr_color};">'
-            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
+            f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">'
             f'<span style="font-size:14px;font-weight:700;color:#1A1A2E;">{_mgr_short}</span>'
+            f'<span style="font-size:11px;font-weight:600;color:#8C939D;text-transform:uppercase;'
+            f'letter-spacing:0.5px;">{_current_month_label}</span>'
             f'</div>'
             f'{_bdm_bars}'
             f'</div>',

@@ -64,6 +64,13 @@ from data_loader import (
     load_longlist, build_touches_timeline, compute_bdm_kpi,
     _last_touch_date,
 )
+from weekly_page import (
+    _weekly_window, _mtd_window,
+    _count_touches_in_window, _count_new_companies_in_window,
+    _count_deals_in_window, _sum_kp_in_window, _count_closings_in_window,
+    _overdue_next_steps, _stalled_companies, _empty_result_touches,
+    _delta_chip_html,
+)
 
 # ═══════════════════════════════════════════════════════════════════
 # Fixtures — load real data once per session
@@ -858,3 +865,146 @@ class TestIntegration:
         """STATUS_COLORS should have colors for main statuses."""
         for status in ["Нет ОС", "На рассмотрении", "Договор", "Подписан", "Не интересно"]:
             assert status in STATUS_COLORS, f"Missing color for {status}"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 9. Weekly page (sliding-7 summary + focus lists)
+# ═══════════════════════════════════════════════════════════════════
+
+class TestWeeklyWindows:
+    """Sliding window math for current/previous 7 days and MTD."""
+
+    def test_weekly_window_7_days_length(self):
+        today = pd.Timestamp("2026-04-17")
+        curr_s, curr_e, prev_s, prev_e = _weekly_window(today)
+        # Current window must cover exactly 7 calendar days
+        assert (curr_e.normalize() - curr_s.normalize()).days == 6
+        # Previous window also 7 days, ending right before current starts
+        assert (prev_e.normalize() - prev_s.normalize()).days == 6
+        assert prev_e < curr_s
+
+    def test_weekly_window_endpoints(self):
+        today = pd.Timestamp("2026-04-17")
+        curr_s, curr_e, prev_s, prev_e = _weekly_window(today)
+        assert curr_s.date().isoformat() == "2026-04-11"
+        assert curr_e.date().isoformat() == "2026-04-17"
+        assert prev_s.date().isoformat() == "2026-04-04"
+        assert prev_e.date().isoformat() == "2026-04-10"
+
+    def test_mtd_window_april(self):
+        today = pd.Timestamp("2026-04-17")
+        curr_s, curr_e, prev_s, prev_e = _mtd_window(today)
+        assert curr_s.date().isoformat() == "2026-04-01"
+        assert curr_e.date().isoformat() == "2026-04-17"
+        assert prev_s.date().isoformat() == "2026-03-01"
+        assert prev_e.date().isoformat() == "2026-03-17"
+
+
+class TestWeeklyCounters:
+    """Counters over real pipeline/deals data."""
+
+    def test_touches_in_window_non_negative(self, pipeline):
+        managers = list(pipeline["manager"].unique())
+        today = pd.Timestamp("2026-04-17")
+        curr_s, curr_e, _, _ = _weekly_window(today)
+        n = _count_touches_in_window(pipeline, curr_s, curr_e, managers)
+        assert n >= 0
+        assert isinstance(n, int)
+
+    def test_new_companies_in_window_non_negative(self, pipeline):
+        managers = list(pipeline["manager"].unique())
+        today = pd.Timestamp("2026-04-17")
+        curr_s, curr_e, _, _ = _weekly_window(today)
+        n = _count_new_companies_in_window(pipeline, curr_s, curr_e, managers)
+        assert n >= 0
+
+    def test_new_companies_le_touches(self, pipeline):
+        """Новых компаний не больше, чем касаний (первое касание — частный случай)."""
+        managers = list(pipeline["manager"].unique())
+        today = pd.Timestamp("2026-04-17")
+        curr_s, curr_e, _, _ = _weekly_window(today)
+        touches = _count_touches_in_window(pipeline, curr_s, curr_e, managers)
+        new_c = _count_new_companies_in_window(pipeline, curr_s, curr_e, managers)
+        assert new_c <= touches
+
+    def test_deals_in_window_non_negative(self, deals):
+        today = pd.Timestamp("2026-04-17")
+        curr_s, curr_e, _, _ = _weekly_window(today)
+        n = _count_deals_in_window(deals, "date_received", curr_s, curr_e)
+        assert n >= 0
+
+    def test_sum_kp_in_window_non_negative(self, deals):
+        today = pd.Timestamp("2026-04-17")
+        curr_s, curr_e, _, _ = _weekly_window(today)
+        s = _sum_kp_in_window(deals, curr_s, curr_e)
+        assert s >= 0
+
+    def test_closings_in_window_non_negative(self, pipeline):
+        managers = list(pipeline["manager"].unique())
+        today = pd.Timestamp("2026-04-17")
+        curr_s, curr_e, _, _ = _weekly_window(today)
+        n = _count_closings_in_window(pipeline, curr_s, curr_e, managers)
+        assert n >= 0
+
+
+class TestWeeklyFocusLists:
+    """Focus lists for next week (overdue, stalled, empty results)."""
+
+    def test_overdue_next_steps_shape(self, deals):
+        today = pd.Timestamp("2026-04-17")
+        managers = deals["partner_manager"].dropna().unique().tolist() if "partner_manager" in deals.columns else []
+        overdue = _overdue_next_steps(deals, today, managers)
+        # Либо пустой, либо содержит overdue_days
+        if not overdue.empty:
+            assert "overdue_days" in overdue.columns
+            assert (overdue["overdue_days"] > 0).all()
+            assert (overdue["next_step_date"] < today).all()
+
+    def test_stalled_companies_shape(self, pipeline):
+        managers = list(pipeline["manager"].unique())
+        today = pd.Timestamp("2026-04-17")
+        stalled = _stalled_companies(pipeline, today, managers, threshold_days=7)
+        if not stalled.empty:
+            assert set(["company", "manager", "_last_touch", "days_since", "status"]).issubset(stalled.columns)
+            assert (stalled["days_since"] > 7).all()
+            # Финальные статусы исключены
+            for s in stalled["status"].unique():
+                assert s not in {"Договор", "Подписан", "Отказ", "Неликвид"}
+
+    def test_empty_result_touches_shape(self, pipeline):
+        managers = list(pipeline["manager"].unique())
+        empty = _empty_result_touches(pipeline, managers)
+        if not empty.empty:
+            assert set(["company", "manager", "touch_num", "touch_date", "status"]).issubset(empty.columns)
+            assert (empty["touch_date"].notna()).all()
+
+
+class TestDeltaChip:
+    """Rendering of delta chips: sign, direction arrows, edge cases."""
+
+    def test_positive_delta_contains_up_arrow(self):
+        html = _delta_chip_html(110, 100)
+        assert "▲" in html
+        assert "+10" in html
+
+    def test_negative_delta_contains_down_arrow(self):
+        html = _delta_chip_html(80, 100)
+        assert "▼" in html
+        assert "-20" in html
+
+    def test_zero_delta_renders_neutral(self):
+        html = _delta_chip_html(50, 50)
+        assert "без изм" in html.lower()
+
+    def test_both_zero_renders_neutral(self):
+        html = _delta_chip_html(0, 0)
+        assert "без изм" in html.lower()
+
+    def test_prev_zero_with_current_renders_vs_0(self):
+        html = _delta_chip_html(5, 0)
+        assert "vs 0" in html
+
+    def test_money_delta_uses_short_format(self):
+        html = _delta_chip_html(2_000_000, 1_000_000, is_money=True)
+        # Должен использоваться _short_money: "+1.0м"
+        assert "м" in html
